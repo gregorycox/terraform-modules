@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2018 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,25 @@
  * limitations under the License.
  */
 
-terraform {
-  required_version = ">= 0.13"
-  required_providers {
+module "dns-forwarding-zone" {
+  source  = "terraform-google-modules/cloud-dns/google"
+  version = "~> 5.0"
 
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.40, < 6"
+  project_id = var.project_id
+  type       = "forwarding"
+  name       = var.name
+  domain     = var.domain
+  labels     = var.labels
+
+  private_visibility_config_networks = [var.network_self_link]
+  target_name_server_addresses = [
+    {
+      ipv4_address    = "8.8.8.8",
+      forwarding_path = "default"
+    },
+    {
+      ipv4_address    = "8.8.4.4",
+      forwarding_path = "default"
     }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.40, < 6"
-    }
-  }
-
-  provider_meta "google" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
+  ]
 }

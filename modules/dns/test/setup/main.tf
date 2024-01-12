@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2019 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,17 @@
  * limitations under the License.
  */
 
-terraform {
-  required_version = ">= 0.13"
-  required_providers {
+module "project" {
+  source  = "terraform-google-modules/project-factory/google"
+  version = "~> 14.0"
 
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.40, < 6"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.40, < 6"
-    }
-  }
+  name              = "ci-cloud-dns"
+  random_project_id = "true"
+  org_id            = var.org_id
+  folder_id         = var.folder_id
+  billing_account   = var.billing_account
 
-  provider_meta "google" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
+  activate_apis = [
+    "dns.googleapis.com"
+  ]
 }

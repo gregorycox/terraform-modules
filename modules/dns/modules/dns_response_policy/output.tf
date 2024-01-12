@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,12 @@
  * limitations under the License.
  */
 
-terraform {
-  required_version = ">= 0.13"
-  required_providers {
+output "response_policy_id" {
+  description = "An identifier for the resource with format projects/{{project}}/responsePolicies/{{response_policy_name}}."
+  value       = google_dns_response_policy.this.id
+}
 
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.40, < 6"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.40, < 6"
-    }
-  }
-
-  provider_meta "google" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
+output "response_policy_rule_ids" {
+  description = "List of response rules with format projects/{{project}}/responsePolicies/{{response_policy}}/rules/{{rule_name}}."
+  value       = [for rule in google_dns_response_policy_rule.this : rule.id]
 }

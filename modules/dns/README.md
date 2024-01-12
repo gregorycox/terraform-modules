@@ -1,167 +1,130 @@
-# Google Cloud DNS Module
+# Terraform Google Cloud DNS Module
 
-This module allows simple management of Google Cloud DNS zones and records. It supports creating public, private, forwarding, peering, service directory and reverse-managed based zones. To create inbound/outbound server policies, please have a look at the [net-vpc](../net-vpc/README.md) module.
+This module makes it easy to create Google Cloud DNS zones of different types, and manage their records. It supports creating public, private, forwarding, peering, reverse_lookup and service directory zones.
 
-For DNSSEC configuration, refer to the [`dns_managed_zone` documentation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/dns_managed_zone#dnssec_config).
+The resources/services/activations/deletions that this module will create/trigger are:
 
-## Examples
+- One `google_dns_managed_zone` for the zone
+- Zero or more `google_dns_record_set` for the zone records
 
-### Private Zone
+## Compatibility
+This module is meant for use with Terraform 0.13+ and tested using Terraform 1.0+. If you find incompatibilities using Terraform >=0.13, please open an issue.
+ If you haven't
+[upgraded](https://www.terraform.io/upgrade-guides/0-13.html) and need a Terraform
+0.12.x-compatible version of this module, the last released version
+intended for Terraform 0.12.x is [v3.1.0](https://registry.terraform.io/modules/terraform-google-modules/-cloud-dns/google/v3.1.0).
 
-```hcl
-module "private-dns" {
-  source     = "./fabric/modules/dns"
-  project_id = var.project_id
-  name       = "test-example"
-  zone_config = {
-    domain = "test.example."
-    private = {
-      client_networks = [var.vpc.self_link]
-    }
-  }
-  recordsets = {
-    "A localhost" = { records = ["127.0.0.1"] }
-    "A myhost"    = { ttl = 600, records = ["10.0.0.120"] }
-  }
-  iam = {
-    "roles/dns.admin" = ["group:${var.group_email}"]
-  }
-}
-# tftest modules=1 resources=4 inventory=private-zone.yaml e2e
-```
+## Usage
 
-### Forwarding Zone
+Basic usage of this module for a private zone is as follows:
 
 ```hcl
-module "private-dns" {
-  source     = "./fabric/modules/dns"
-  project_id = var.project_id
-  name       = "test-example"
-  zone_config = {
-    domain = "test.example."
-    forwarding = {
-      client_networks = [var.vpc.self_link]
-      forwarders      = { "10.0.1.1" = null, "1.2.3.4" = "private" }
-    }
-  }
-}
-# tftest modules=1 resources=1 inventory=forwarding-zone.yaml e2e
-```
+module "dns-private-zone" {
+  source  = "terraform-google-modules/cloud-dns/google"
+  version = "4.0"
+  project_id = "my-project"
+  type       = "private"
+  name       = "example-com"
+  domain     = "example.com."
 
-### Peering Zone
+  private_visibility_config_networks = [
+    "https://www.googleapis.com/compute/v1/projects/my-project/global/networks/my-vpc"
+  ]
 
-```hcl
-module "private-dns" {
-  source     = "./fabric/modules/dns"
-  project_id = var.project_id
-  name       = "test-example"
-  zone_config = {
-    domain = "."
-    peering = {
-      client_networks = [var.vpc.self_link]
-      peer_network    = var.vpc2.self_link
-    }
-  }
-}
-# tftest modules=1 resources=1 inventory=peering-zone.yaml
-```
-
-### Routing Policies
-
-```hcl
-module "private-dns" {
-  source     = "./fabric/modules/dns"
-  project_id = var.project_id
-  name       = "test-example"
-  zone_config = {
-    domain = "test.example."
-    private = {
-      client_networks = [var.vpc.self_link]
-    }
-  }
-  recordsets = {
-    "A regular" = { records = ["10.20.0.1"] }
-    "A geo" = {
-      geo_routing = [
-        { location = "europe-west1", records = ["10.0.0.1"] },
-        { location = "europe-west2", records = ["10.0.0.2"] },
-        { location = "europe-west3", records = ["10.0.0.3"] }
+  recordsets = [
+    {
+      name    = ""
+      type    = "NS"
+      ttl     = 300
+      records = [
+        "127.0.0.1",
       ]
-    }
-
-    "A wrr" = {
-      ttl = 600
-      wrr_routing = [
-        { weight = 0.6, records = ["10.10.0.1"] },
-        { weight = 0.2, records = ["10.10.0.2"] },
-        { weight = 0.2, records = ["10.10.0.3"] }
+    },
+    {
+      name    = "localhost"
+      type    = "A"
+      ttl     = 300
+      records = [
+        "127.0.0.1",
       ]
-    }
-  }
+    },
+  ]
 }
-# tftest modules=1 resources=4 inventory=routing-policies.yaml e2e
+
 ```
 
-### Reverse Lookup Zone
+Functional examples are included in the [examples](./examples/) directory.
 
-```hcl
-module "private-dns" {
-  source     = "./fabric/modules/dns"
-  project_id = var.project_id
-  name       = "test-example"
-  zone_config = {
-    domain = "0.0.10.in-addr.arpa."
-    private = {
-      client_networks = [var.vpc.self_link]
-    }
-  }
-}
-# tftest modules=1 resources=1 inventory=reverse-zone.yaml e2e
-```
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Inputs
 
-### Public Zone
-
-```hcl
-module "public-dns" {
-  source     = "./fabric/modules/dns"
-  project_id = var.project_id
-  name       = "test-example"
-  zone_config = {
-    domain = "test.example."
-    public = {}
-  }
-  recordsets = {
-    "A myhost" = { ttl = 300, records = ["127.0.0.1"] }
-  }
-  iam = {
-    "roles/dns.admin" = ["group:${var.group_email}"]
-  }
-}
-# tftest modules=1 resources=3 inventory=public-zone.yaml e2e
-```
-<!-- BEGIN TFDOC -->
-## Variables
-
-| name | description | type | required | default |
-|---|---|:---:|:---:|:---:|
-| [name](variables.tf#L29) | Zone name, must be unique within the project. | <code>string</code> | ✓ |  |
-| [project_id](variables.tf#L34) | Project id for the zone. | <code>string</code> | ✓ |  |
-| [description](variables.tf#L17) | Domain description. | <code>string</code> |  | <code>&#34;Terraform managed.&#34;</code> |
-| [iam](variables.tf#L23) | IAM bindings in {ROLE => [MEMBERS]} format. | <code>map&#40;list&#40;string&#41;&#41;</code> |  | <code>null</code> |
-| [recordsets](variables.tf#L39) | Map of DNS recordsets in \"type name\" => {ttl, [records]} format. | <code title="map&#40;object&#40;&#123;&#10;  ttl     &#61; optional&#40;number, 300&#41;&#10;  records &#61; optional&#40;list&#40;string&#41;&#41;&#10;  geo_routing &#61; optional&#40;list&#40;object&#40;&#123;&#10;    location &#61; string&#10;    records  &#61; list&#40;string&#41;&#10;  &#125;&#41;&#41;&#41;&#10;  wrr_routing &#61; optional&#40;list&#40;object&#40;&#123;&#10;    weight  &#61; number&#10;    records &#61; list&#40;string&#41;&#10;  &#125;&#41;&#41;&#41;&#10;&#125;&#41;&#41;">map&#40;object&#40;&#123;&#8230;&#125;&#41;&#41;</code> |  | <code>&#123;&#125;</code> |
-| [zone_config](variables.tf#L74) | DNS zone configuration. | <code title="object&#40;&#123;&#10;  domain &#61; string&#10;  forwarding &#61; optional&#40;object&#40;&#123;&#10;    forwarders      &#61; optional&#40;map&#40;string&#41;&#41;&#10;    client_networks &#61; list&#40;string&#41;&#10;  &#125;&#41;&#41;&#10;  peering &#61; optional&#40;object&#40;&#123;&#10;    client_networks &#61; list&#40;string&#41;&#10;    peer_network    &#61; string&#10;  &#125;&#41;&#41;&#10;  public &#61; optional&#40;object&#40;&#123;&#10;    dnssec_config &#61; optional&#40;object&#40;&#123;&#10;      non_existence &#61; optional&#40;string, &#34;nsec3&#34;&#41;&#10;      state         &#61; string&#10;      key_signing_key &#61; optional&#40;object&#40;&#10;        &#123; algorithm &#61; string, key_length &#61; number &#125;&#41;,&#10;        &#123; algorithm &#61; &#34;rsasha256&#34;, key_length &#61; 2048 &#125;&#10;      &#41;&#10;      zone_signing_key &#61; optional&#40;object&#40;&#10;        &#123; algorithm &#61; string, key_length &#61; number &#125;&#41;,&#10;        &#123; algorithm &#61; &#34;rsasha256&#34;, key_length &#61; 1024 &#125;&#10;      &#41;&#10;    &#125;&#41;&#41;&#10;    enable_logging &#61; optional&#40;bool, false&#41;&#10;  &#125;&#41;&#41;&#10;  private &#61; optional&#40;object&#40;&#123;&#10;    client_networks             &#61; list&#40;string&#41;&#10;    service_directory_namespace &#61; optional&#40;string&#41;&#10;  &#125;&#41;&#41;&#10;&#125;&#41;">object&#40;&#123;&#8230;&#125;&#41;</code> |  | <code>null</code> |
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| default\_key\_specs\_key | Object containing default key signing specifications : algorithm, key\_length, key\_type, kind. Please see https://www.terraform.io/docs/providers/google/r/dns_managed_zone#dnssec_config for futhers details | `any` | `{}` | no |
+| default\_key\_specs\_zone | Object containing default zone signing specifications : algorithm, key\_length, key\_type, kind. Please see https://www.terraform.io/docs/providers/google/r/dns_managed_zone#dnssec_config for futhers details | `any` | `{}` | no |
+| description | zone description (shown in console) | `string` | `"Managed by Terraform"` | no |
+| dnssec\_config | Object containing : kind, non\_existence, state. Please see https://www.terraform.io/docs/providers/google/r/dns_managed_zone#dnssec_config for futhers details | `any` | `{}` | no |
+| domain | Zone domain, must end with a period. | `string` | n/a | yes |
+| enable\_logging | Enable query logging for this ManagedZone | `bool` | `false` | no |
+| force\_destroy | Set this true to delete all records in the zone. | `bool` | `false` | no |
+| labels | A set of key/value label pairs to assign to this ManagedZone | `map(any)` | `{}` | no |
+| name | Zone name, must be unique within the project. | `string` | n/a | yes |
+| private\_visibility\_config\_networks | List of VPC self links that can see this zone. | `list(string)` | `[]` | no |
+| project\_id | Project id for the zone. | `string` | n/a | yes |
+| recordsets | List of DNS record objects to manage, in the standard terraform dns structure. | <pre>list(object({<br>    name    = string<br>    type    = string<br>    ttl     = number<br>    records = optional(list(string), null)<br><br>    routing_policy = optional(object({<br>      wrr = optional(list(object({<br>        weight  = number<br>        records = list(string)<br>      })), [])<br>      geo = optional(list(object({<br>        location = string<br>        records  = list(string)<br>      })), [])<br>    }))<br>  }))</pre> | `[]` | no |
+| service\_namespace\_url | The fully qualified or partial URL of the service directory namespace that should be associated with the zone. This should be formatted like https://servicedirectory.googleapis.com/v1/projects/{project}/locations/{location}/namespaces/{namespace_id} or simply projects/{project}/locations/{location}/namespaces/{namespace\_id}. | `string` | `""` | no |
+| target\_name\_server\_addresses | List of target name servers for forwarding zone. | `list(map(any))` | `[]` | no |
+| target\_network | Peering network. | `string` | `""` | no |
+| type | Type of zone to create, valid values are 'public', 'private', 'forwarding', 'peering', 'reverse\_lookup' and 'service\_directory'. | `string` | `"private"` | no |
 
 ## Outputs
 
-| name | description | sensitive |
-|---|---|:---:|
-| [dns_keys](outputs.tf#L17) | DNSKEY and DS records of DNSSEC-signed managed zones. |  |
-| [domain](outputs.tf#L22) | The DNS zone domain. |  |
-| [id](outputs.tf#L27) | Fully qualified zone id. |  |
-| [name](outputs.tf#L32) | The DNS zone name. |  |
-| [name_servers](outputs.tf#L37) | The DNS zone name servers. |  |
-| [zone](outputs.tf#L42) | DNS zone resource. |  |
-<!-- END TFDOC -->
+| Name | Description |
+|------|-------------|
+| domain | The DNS zone domain. |
+| name | The DNS zone name. |
+| name\_servers | The DNS zone name servers. |
+| type | The DNS zone type. |
 
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
+## Requirements
 
+These sections describe requirements for using this module.
+
+### Software
+
+The following dependencies must be available:
+
+- [Terraform](https://www.terraform.io/downloads.html) >= 0.13.0
+- [Terraform Provider for GCP][terraform-provider-gcp] plugin >= v4.40
+
+### Service Account
+
+User or service account credentials with the following roles must be used to provision the resources of this module:
+
+- DNS Administrator: `roles/dns.admin`
+
+The [Project Factory module][project-factory-module] and the
+[IAM module][iam-module] may be used in combination to provision a
+service account with the necessary roles applied.
+
+### APIs
+
+A project with the following APIs enabled must be used to host the
+resources of this module:
+
+- Google Cloud DNS API: `dns.googleapis.com`
+
+The [Project Factory module][project-factory-module] can be used to
+provision a project with the necessary APIs enabled.
+
+## Contributing
+
+Refer to the [contribution guidelines](./CONTRIBUTING.md) for
+information on contributing to this module.
+
+[iam-module]: https://registry.terraform.io/modules/terraform-google-modules/iam/google
+[project-factory-module]: https://registry.terraform.io/modules/terraform-google-modules/project-factory/google
+[terraform-provider-gcp]: https://www.terraform.io/docs/providers/google/index.html
+[terraform]: https://www.terraform.io/downloads.html

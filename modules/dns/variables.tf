@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2019 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,13 @@
  * limitations under the License.
  */
 
-variable "description" {
-  description = "Domain description."
-  type        = string
-  default     = "Terraform managed."
-}
+###############################################################################
+#                                zone variables                               #
+###############################################################################
 
-variable "iam" {
-  description = "IAM bindings in {ROLE => [MEMBERS]} format."
-  type        = map(list(string))
-  default     = null
+variable "domain" {
+  description = "Zone domain, must end with a period."
+  type        = string
 }
 
 variable "name" {
@@ -31,88 +28,105 @@ variable "name" {
   type        = string
 }
 
+variable "private_visibility_config_networks" {
+  description = "List of VPC self links that can see this zone."
+  default     = []
+  type        = list(string)
+}
+
 variable "project_id" {
   description = "Project id for the zone."
   type        = string
 }
 
+variable "target_name_server_addresses" {
+  description = "List of target name servers for forwarding zone."
+  default     = []
+  type        = list(map(any))
+}
+
+variable "target_network" {
+  description = "Peering network."
+  default     = ""
+  type        = string
+}
+
+variable "description" {
+  description = "zone description (shown in console)"
+  default     = "Managed by Terraform"
+  type        = string
+}
+
+variable "type" {
+  description = "Type of zone to create, valid values are 'public', 'private', 'forwarding', 'peering', 'reverse_lookup' and 'service_directory'."
+  default     = "private"
+  type        = string
+}
+
+variable "dnssec_config" {
+  description = "Object containing : kind, non_existence, state. Please see https://www.terraform.io/docs/providers/google/r/dns_managed_zone#dnssec_config for futhers details"
+  type        = any
+  default     = {}
+}
+
+variable "labels" {
+  type        = map(any)
+  description = "A set of key/value label pairs to assign to this ManagedZone"
+  default     = {}
+}
+
+variable "default_key_specs_key" {
+  description = "Object containing default key signing specifications : algorithm, key_length, key_type, kind. Please see https://www.terraform.io/docs/providers/google/r/dns_managed_zone#dnssec_config for futhers details"
+  type        = any
+  default     = {}
+}
+
+variable "default_key_specs_zone" {
+  description = "Object containing default zone signing specifications : algorithm, key_length, key_type, kind. Please see https://www.terraform.io/docs/providers/google/r/dns_managed_zone#dnssec_config for futhers details"
+  type        = any
+  default     = {}
+}
+
+variable "force_destroy" {
+  description = "Set this true to delete all records in the zone."
+  default     = false
+  type        = bool
+}
+variable "service_namespace_url" {
+  type        = string
+  default     = ""
+  description = "The fully qualified or partial URL of the service directory namespace that should be associated with the zone. This should be formatted like https://servicedirectory.googleapis.com/v1/projects/{project}/locations/{location}/namespaces/{namespace_id} or simply projects/{project}/locations/{location}/namespaces/{namespace_id}."
+}
+
+###############################################################################
+#                               record variables                              #
+###############################################################################
+
 variable "recordsets" {
-  description = "Map of DNS recordsets in \"type name\" => {ttl, [records]} format."
-  type = map(object({
-    ttl     = optional(number, 300)
-    records = optional(list(string))
-    geo_routing = optional(list(object({
-      location = string
-      records  = list(string)
-    })))
-    wrr_routing = optional(list(object({
-      weight  = number
-      records = list(string)
-    })))
+  type = list(object({
+    name    = string
+    type    = string
+    ttl     = number
+    records = optional(list(string), null)
+
+    routing_policy = optional(object({
+      wrr = optional(list(object({
+        weight  = number
+        records = list(string)
+      })), [])
+      geo = optional(list(object({
+        location = string
+        records  = list(string)
+      })), [])
+    }))
   }))
-  default  = {}
-  nullable = false
-  validation {
-    condition = alltrue([
-      for k, v in coalesce(var.recordsets, {}) :
-      length(split(" ", k)) == 2
-    ])
-    error_message = "Recordsets must have keys in the format \"type name\"."
-  }
-  validation {
-    condition = alltrue([
-      for k, v in coalesce(var.recordsets, {}) : (
-        (v.records != null && v.wrr_routing == null && v.geo_routing == null) ||
-        (v.records == null && v.wrr_routing != null && v.geo_routing == null) ||
-        (v.records == null && v.wrr_routing == null && v.geo_routing != null)
-      )
-    ])
-    error_message = "Only one of records, wrr_routing or geo_routing can be defined for each recordset."
-  }
+
+  description = "List of DNS record objects to manage, in the standard terraform dns structure."
+  default     = []
 }
 
-variable "zone_config" {
-  description = "DNS zone configuration."
-  type = object({
-    domain = string
-    forwarding = optional(object({
-      forwarders      = optional(map(string))
-      client_networks = list(string)
-    }))
-    peering = optional(object({
-      client_networks = list(string)
-      peer_network    = string
-    }))
-    public = optional(object({
-      dnssec_config = optional(object({
-        non_existence = optional(string, "nsec3")
-        state         = string
-        key_signing_key = optional(object(
-          { algorithm = string, key_length = number }),
-          { algorithm = "rsasha256", key_length = 2048 }
-        )
-        zone_signing_key = optional(object(
-          { algorithm = string, key_length = number }),
-          { algorithm = "rsasha256", key_length = 1024 }
-        )
-      }))
-      enable_logging = optional(bool, false)
-    }))
-    private = optional(object({
-      client_networks             = list(string)
-      service_directory_namespace = optional(string)
-    }))
-  })
-  validation {
-    condition = (
-      (try(var.zone_config.forwarding, null) == null ? 0 : 1) +
-      (try(var.zone_config.peering, null) == null ? 0 : 1) +
-      (try(var.zone_config.public, null) == null ? 0 : 1) +
-      (try(var.zone_config.private, null) == null ? 0 : 1) <= 1
-    )
-    error_message = "Only one type of zone can be configured at a time."
-  }
-  default = null
+variable "enable_logging" {
+  description = "Enable query logging for this ManagedZone"
+  default     = false
+  type        = bool
 }
-
-

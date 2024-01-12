@@ -1,5 +1,5 @@
 /**
- * Copyright 2021 Google LLC
+ * Copyright 2018 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,15 @@
  * limitations under the License.
  */
 
-terraform {
-  required_version = ">= 0.13"
-  required_providers {
+module "dns-peering-zone" {
+  source  = "terraform-google-modules/cloud-dns/google"
+  version = "~> 5.0"
 
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.40, < 6"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.40, < 6"
-    }
-  }
-
-  provider_meta "google" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/terraform-google-cloud-dns/v5.2.0"
-  }
-
+  project_id                         = var.project_id
+  type                               = "peering"
+  name                               = var.name
+  domain                             = var.domain
+  private_visibility_config_networks = [var.network_self_link]
+  target_network                     = var.target_network_self_link
+  labels                             = var.labels
 }
